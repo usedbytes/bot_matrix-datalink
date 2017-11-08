@@ -4,6 +4,7 @@ package spiconn
 
 import (
 	"bytes"
+	"flag"
 	"strings"
 	"testing"
 
@@ -540,5 +541,57 @@ func TestDeSerialiseSplitFrames(t *testing.T) {
 		t.Errorf("Packet mismatch.\n  Expected: %v\n       Got: %v\n",
 			 expected, pkts[0])
 		return
+	}
+}
+
+var devname string
+
+func init() {
+	flag.StringVar(&devname, "devname", "", "spidev device to use for loopback test")
+	flag.Parse()
+}
+
+func TestSpiconnConnection(t *testing.T) {
+	if len(devname) == 0 {
+		t.SkipNow()
+	}
+
+	conn, err := NewSPIConn(devname)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	pkts := []packet.Packet{
+		{
+			Endpoint: 0x37,
+			Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
+				0x0e, 0x0f, 0x10, 0x11,
+				0x12, 0x13, 0x00, 0x00},
+		},
+		{
+			Endpoint: 0x42,
+			Data:     []byte{0x00, 0x01, 0x02, 0x03},
+		},
+	}
+	res, err := conn.Transact(pkts)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if len(res) != len(pkts) {
+		t.Errorf("Unexpected number of packets. Expected %d got %d\n",
+			len(pkts), len(res))
+		return
+	}
+
+	for i, p := range res {
+		if !packetsEqual(pkts[i], p) {
+			t.Errorf("Packet %d mismatch.\n  Expected: %v\n       Got: %v\n",
+				 i, pkts[i], p)
+			return
+		}
+
 	}
 }
