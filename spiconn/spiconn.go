@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"log"
+	"github.com/ecc1/spi"
 	"github.com/sigurn/crc8"
 	"github.com/usedbytes/bot_matrix/datalink/connection"
 	"github.com/usedbytes/bot_matrix/datalink/packet"
@@ -23,13 +23,27 @@ struct spi_pl_packet {
 */
 
 type spiXport struct {
+	dev *spi.Device
+}
 
+func newXport(device string, speed int) (*spiXport, error) {
+	dev, err := spi.Open(device, speed, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return &spiXport{
+		dev: dev,
+	}, nil
 }
 
 func (x *spiXport) Transfer(data []byte) ([]byte, error) {
-	log.Printf("SPI Xfer: %x\n", data)
+	tmp := make([]byte, len(data))
+	copy(tmp, data)
 
-	return data, nil
+	err := x.dev.Transfer(tmp)
+
+	return tmp, err
 }
 
 type spiProto struct {
@@ -148,9 +162,12 @@ func NewSPIConn(device string) (*connection.Connection, error) {
 		crc: crc8.MakeTable(crc8.CRC8),
 	}
 
-	_ = device
+	xport, err := newXport(device, 1000000)
+	if err != nil {
+		return nil, err
+	}
 
-	conn := connection.NewConnection(&proto, &spiXport{})
+	conn := connection.NewConnection(&proto, xport)
 
 	return conn, nil
 }
