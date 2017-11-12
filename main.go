@@ -53,9 +53,42 @@ func setDuty(c *connection.Connection, ch byte, dir byte, duty uint16) {
 	c.Transact(data)
 }
 
+func setGains(c *connection.Connection, Kc, Kd, Ki float64) {
+	data := []packet.Packet{
+		{ Endpoint: 4, },
+	}
+
+	iKc := int32(Kc * 256)
+	iKd := int32(Kd * 256)
+	iKi := int32(Ki * 256)
+
+	buf := &bytes.Buffer{}
+	binary.Write(buf, binary.LittleEndian, iKc)
+	binary.Write(buf, binary.LittleEndian, iKd)
+	binary.Write(buf, binary.LittleEndian, iKi)
+
+	data[0].Data = buf.Bytes()
+
+	c.Transact(data)
+}
+
+func setPoint(c *connection.Connection, sp uint32) {
+	data := []packet.Packet{
+		{ Endpoint: 5, },
+	}
+
+	buf := &bytes.Buffer{}
+	binary.Write(buf, binary.LittleEndian, sp)
+
+	data[0].Data = buf.Bytes()
+
+	c.Transact(data)
+}
+
 func main() {
 	var on bool
 	c, _ := spiconn.NewSPIConn("/dev/spidev0.0")
+	fmt.Println("Hello")
 
 	for {
 		for f := uint32(2000); f < 20000; f += 1000 {
