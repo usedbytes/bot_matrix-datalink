@@ -85,6 +85,19 @@ func setPoint(c *connection.Connection, sp uint32) {
 	c.Transact(data)
 }
 
+func setIlimit(c *connection.Connection, il uint32) {
+	data := []packet.Packet{
+		{ Endpoint: 6, },
+	}
+
+	buf := &bytes.Buffer{}
+	binary.Write(buf, binary.LittleEndian, il)
+
+	data[0].Data = buf.Bytes()
+
+	c.Transact(data)
+}
+
 func main() {
 	var on bool
 	c, _ := spiconn.NewSPIConn("/dev/spidev0.0")
