@@ -158,7 +158,7 @@ func (p *spiProto) DeSerialise(data []byte) ([]packet.Packet, error) {
 func NewSPIConn(device string) (*connection.Connection, error) {
 	proto := spiProto{
 		id: 0,
-		datalen: 4,
+		datalen: 32,
 		crc: crc8.MakeTable(crc8.CRC8),
 	}
 
