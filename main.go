@@ -58,9 +58,9 @@ func setGains(c *connection.Connection, Kc, Kd, Ki float64) {
 		{ Endpoint: 4, },
 	}
 
-	iKc := int32(Kc * 256)
-	iKd := int32(Kd * 256)
-	iKi := int32(Ki * 256)
+	iKc := int32(Kc * 65536)
+	iKd := int32(Kd * 65536)
+	iKi := int32(Ki * 65536)
 
 	buf := &bytes.Buffer{}
 	binary.Write(buf, binary.LittleEndian, iKc)
