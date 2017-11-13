@@ -7,6 +7,10 @@ import (
 	"github.com/usedbytes/bot_matrix/datalink/transport"
 )
 
+type Transactor interface {
+	Transact([]packet.Packet) ([]packet.Packet, error)
+}
+
 type Connection struct {
 	protocol protocol.Protocol
 	transport transport.Transport
