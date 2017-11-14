@@ -42,7 +42,7 @@ type RPCClient struct {
 	client *rpc.Client
 }
 
-func NewRPCClient(server string) (*RPCClient, error) {
+func NewRPCClient(server string) (datalink.Transactor, error) {
 	client, err := rpc.Dial("tcp", server)
 	if err != nil {
 		return nil, err
