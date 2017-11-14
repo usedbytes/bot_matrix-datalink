@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,42 @@ import (
 	"github.com/usedbytes/bot_matrix/datalink/spiconn"
 	"github.com/usedbytes/bot_matrix/datalink/rpcconn"
 )
+
+func pumpDatalink(conn datalink.Transactor, tx <-chan datalink.Packet,
+		  rx chan<- datalink.Packet, stop <-chan bool) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+
+	toSend := make([]datalink.Packet, 0, 4)
+
+	for {
+		select {
+		case _ = <-ticker.C:
+			if len(toSend) > 0 {
+				fmt.Printf("Have %d packets to send.\n", len(toSend))
+			}
+			if len(toSend) < 4 {
+				toSend = append(toSend, make([]datalink.Packet, 4 - len(toSend))...)
+			}
+
+			pkts, err := conn.Transact(toSend)
+			if err != nil {
+				fmt.Printf("Error! %s\n", err)
+			} else {
+				for _, p := range pkts {
+					rx <-p
+				}
+			}
+
+			toSend = make([]datalink.Packet, 0, 4)
+
+		case p := <-tx:
+			toSend = append(toSend, p)
+
+		case _ = <-stop:
+			return
+		}
+	}
+}
 
 func ledOn(c datalink.Transactor) {
 	data := []datalink.Packet{
@@ -100,6 +137,83 @@ func setIlimit(c datalink.Transactor, il uint32) {
 	data[0].Data = buf.Bytes()
 
 	c.Transact(data)
+}
+
+type motor_data struct {
+	Timestamp uint32
+	Count uint32
+	Duty uint16
+}
+
+func (m *motor_data) UnmarshalBinary(data []byte) error {
+	buf := bytes.NewBuffer(data)
+	binary.Read(buf, binary.LittleEndian, &m.Timestamp)
+	binary.Read(buf, binary.LittleEndian, &m.Count)
+	binary.Read(buf, binary.LittleEndian, &m.Duty)
+
+	return nil
+}
+
+func characteriseMotor(c datalink.Transactor, ctx *ishell.Context) {
+	tx := make(chan datalink.Packet, 10)
+	rx := make(chan datalink.Packet, 10)
+	stop := make(chan bool, 1)
+
+	f, err := os.Create("log.csv")
+	if err != nil {
+		ctx.Err(err)
+		return
+	}
+	defer f.Close()
+
+	ticker := time.NewTicker(time.Second * 2)
+
+	go pumpDatalink(c, tx, rx, stop)
+
+	for duty := uint16(0); duty <= 65535 - 1000; {
+		select {
+		case _ = <-ticker.C:
+			duty += 1000
+			data := []datalink.Packet{
+				{ Endpoint: 3, },
+			}
+
+			buf := &bytes.Buffer{}
+			binary.Write(buf, binary.LittleEndian, byte(0))
+			binary.Write(buf, binary.LittleEndian, byte(0))
+			binary.Write(buf, binary.LittleEndian, duty)
+
+			data[0].Data = buf.Bytes()
+			tx <- data[0]
+
+			fmt.Printf("Waiting for duty to change\n")
+			for p := range rx {
+				if p.Endpoint != 0xf {
+					continue
+				}
+
+				var m motor_data;
+
+				m.UnmarshalBinary(p.Data)
+				if m.Duty == duty {
+					break
+				}
+			}
+			fmt.Printf("Changed to %d\n", duty)
+		case p := <-rx:
+			if p.Endpoint != 0xf {
+				break
+			}
+
+			var m motor_data;
+			m.UnmarshalBinary(p.Data)
+			fmt.Fprintf(f, "%v, %v, %v\n", m.Timestamp, m.Count, m.Duty);
+		}
+	}
+
+	setDuty(c, 0, 0, 0)
+
+	stop <- true
 }
 
 func main() {
@@ -198,8 +312,18 @@ func main() {
 		},
 	})
 
+	shell.AddCmd(&ishell.Cmd{
+		Name: "char",
+		Help: "char",
+		Func: func(ctx *ishell.Context) {
+			characteriseMotor(c, ctx)
+		},
+	})
+
 	// run shell
 	shell.Run()
+
+	return
 
 	for {
 		for f := uint32(2000); f < 20000; f += 1000 {
