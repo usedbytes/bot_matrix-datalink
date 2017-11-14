@@ -33,6 +33,42 @@ func TestInnerSerialise(t *testing.T) {
 	}
 }
 
+func TestInnerSerialiseZeroPacket(t *testing.T) {
+	proto := &spiProto{
+		id:      0,
+		datalen: 4,
+		crc:     crc8.MakeTable(crc8.CRC8),
+	}
+
+	buf := new(bytes.Buffer)
+	pkt := datalink.Packet{
+		Endpoint: 0,
+		Data:     nil,
+	}
+	expect := []byte{0x01, 0, 0, 0, 0, 0, 0, 0,}
+	expect = append(expect, crc8.Checksum(expect, proto.crc))
+
+	proto.serialise(buf, pkt)
+	if !bytes.Equal(buf.Bytes(), expect) {
+		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
+			expect, buf.Bytes())
+	}
+
+	buf = new(bytes.Buffer)
+	pkt = datalink.Packet{
+		Endpoint: 0,
+		Data:     []byte{},
+	}
+	expect = []byte{0x02, 0, 0, 0, 0, 0, 0, 0,}
+	expect = append(expect, crc8.Checksum(expect, proto.crc))
+
+	proto.serialise(buf, pkt)
+	if !bytes.Equal(buf.Bytes(), expect) {
+		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
+			expect, buf.Bytes())
+	}
+}
+
 func TestInnerSerialiseShortData(t *testing.T) {
 	proto := &spiProto{
 		id:      1,

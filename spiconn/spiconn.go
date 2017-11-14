@@ -63,6 +63,11 @@ func min(a, b int) int {
 }
 
 func (p *spiProto) serialise(into *bytes.Buffer, pkt datalink.Packet) {
+	// Slightly ugly way to handle empty packets.
+	if pkt.Data == nil || len(pkt.Data) == 0 {
+		pkt.Data = make([]byte, 1)
+	}
+
 	nparts := uint8((len(pkt.Data) + p.datalen - 1) / p.datalen)
 
 	for i, start := 0, 0; i < len(pkt.Data); i += p.datalen {
