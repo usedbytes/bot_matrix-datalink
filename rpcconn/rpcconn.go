@@ -4,12 +4,11 @@ package rpcconn
 import (
 	"net"
 	"net/rpc"
-	"github.com/usedbytes/bot_matrix/datalink/connection"
-	"github.com/usedbytes/bot_matrix/datalink/packet"
+	"github.com/usedbytes/bot_matrix/datalink"
 )
 
 type RPCEndpoint struct {
-	transactor connection.Transactor
+	transactor datalink.Transactor
 }
 
 type RPCServ struct {
@@ -18,7 +17,7 @@ type RPCServ struct {
 	srv *rpc.Server
 }
 
-func (r *RPCEndpoint) RPCTransact(tx []packet.Packet, rx *[]packet.Packet) error {
+func (r *RPCEndpoint) RPCTransact(tx []datalink.Packet, rx *[]datalink.Packet) error {
 	pkts, err := r.transactor.Transact(tx)
 
 	*rx = pkts
@@ -30,7 +29,7 @@ func (r *RPCServ) Serve(l net.Listener) {
 	r.srv.Accept(l)
 }
 
-func NewRPCServ(conn connection.Transactor) (*RPCServ, error) {
+func NewRPCServ(conn datalink.Transactor) (*RPCServ, error) {
 	srv := &RPCServ{ endpoint: RPCEndpoint{ conn } }
 
 	srv.srv = rpc.NewServer()
@@ -52,8 +51,8 @@ func NewRPCClient(server string) (*RPCClient, error) {
 	return &RPCClient{ client }, nil
 }
 
-func (c *RPCClient) Transact(tx []packet.Packet) ([]packet.Packet, error) {
-	rx := make([]packet.Packet, 0, len(tx))
+func (c *RPCClient) Transact(tx []datalink.Packet) ([]datalink.Packet, error) {
+	rx := make([]datalink.Packet, 0, len(tx))
 	err := c.client.Call("RPCEndpoint.RPCTransact", tx, &rx)
 
 	return rx, err

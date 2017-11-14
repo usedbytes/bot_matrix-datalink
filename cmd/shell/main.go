@@ -8,27 +8,26 @@ import (
 	"time"
 
 	"github.com/abiosoft/ishell"
-	"github.com/usedbytes/bot_matrix/datalink/connection"
-	"github.com/usedbytes/bot_matrix/datalink/packet"
+	"github.com/usedbytes/bot_matrix/datalink"
 	"github.com/usedbytes/bot_matrix/datalink/spiconn"
 )
 
-func ledOn(c *connection.Connection) {
-	data := []packet.Packet{
+func ledOn(c *datalink.Connection) {
+	data := []datalink.Packet{
 		{ 1, []byte{1} },
 	}
 	c.Transact(data)
 }
 
-func ledOff(c *connection.Connection) {
-	data := []packet.Packet{
+func ledOff(c *datalink.Connection) {
+	data := []datalink.Packet{
 		{ 1, []byte{0} },
 	}
 	c.Transact(data)
 }
 
-func setFreq(c *connection.Connection, freq uint32) {
-	data := []packet.Packet{
+func setFreq(c *datalink.Connection, freq uint32) {
+	data := []datalink.Packet{
 		{ Endpoint: 2, },
 	}
 
@@ -40,8 +39,8 @@ func setFreq(c *connection.Connection, freq uint32) {
 	c.Transact(data)
 }
 
-func setDuty(c *connection.Connection, ch byte, dir byte, duty uint16) {
-	data := []packet.Packet{
+func setDuty(c *datalink.Connection, ch byte, dir byte, duty uint16) {
+	data := []datalink.Packet{
 		{ Endpoint: 3, },
 	}
 
@@ -55,8 +54,8 @@ func setDuty(c *connection.Connection, ch byte, dir byte, duty uint16) {
 	c.Transact(data)
 }
 
-func setGains(c *connection.Connection, Kc, Kd, Ki float64) {
-	data := []packet.Packet{
+func setGains(c *datalink.Connection, Kc, Kd, Ki float64) {
+	data := []datalink.Packet{
 		{ Endpoint: 4, },
 	}
 
@@ -74,8 +73,8 @@ func setGains(c *connection.Connection, Kc, Kd, Ki float64) {
 	c.Transact(data)
 }
 
-func setPoint(c *connection.Connection, sp uint32) {
-	data := []packet.Packet{
+func setPoint(c *datalink.Connection, sp uint32) {
+	data := []datalink.Packet{
 		{ Endpoint: 5, },
 	}
 
@@ -87,8 +86,8 @@ func setPoint(c *connection.Connection, sp uint32) {
 	c.Transact(data)
 }
 
-func setIlimit(c *connection.Connection, il uint32) {
-	data := []packet.Packet{
+func setIlimit(c *datalink.Connection, il uint32) {
+	data := []datalink.Packet{
 		{ Endpoint: 6, },
 	}
 

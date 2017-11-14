@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/sigurn/crc8"
-	"github.com/usedbytes/bot_matrix/datalink/packet"
+	"github.com/usedbytes/bot_matrix/datalink"
 )
 
 func TestInnerSerialise(t *testing.T) {
@@ -20,7 +20,7 @@ func TestInnerSerialise(t *testing.T) {
 	}
 
 	buf := new(bytes.Buffer)
-	pkt := packet.Packet{
+	pkt := datalink.Packet{
 		Endpoint: 0x37,
 		Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
 	}
@@ -41,7 +41,7 @@ func TestInnerSerialiseShortData(t *testing.T) {
 	}
 
 	buf := new(bytes.Buffer)
-	pkt := packet.Packet{
+	pkt := datalink.Packet{
 		Endpoint: 0x37,
 		Data:     []byte{0x0a},
 	}
@@ -64,7 +64,7 @@ func TestInnerSerialiseID(t *testing.T) {
 	}
 
 	buf := new(bytes.Buffer)
-	pkt := packet.Packet{
+	pkt := datalink.Packet{
 		Endpoint: 0x37,
 		Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
 	}
@@ -96,7 +96,7 @@ func TestInnerSerialiseMultiFrame(t *testing.T) {
 	}
 
 	buf := new(bytes.Buffer)
-	pkt := packet.Packet{
+	pkt := datalink.Packet{
 		Endpoint: 0x37,
 		Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
 			0x0e, 0x0f, 0x10, 0x11},
@@ -113,7 +113,7 @@ func TestInnerSerialiseMultiFrame(t *testing.T) {
 			expect, buf.Bytes())
 	}
 
-	pkt = packet.Packet{
+	pkt = datalink.Packet{
 		Endpoint: 0x37,
 		Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
 			0x0e, 0x0f, 0x10, 0x11,
@@ -140,7 +140,7 @@ func TestSerialise(t *testing.T) {
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	pkts := []packet.Packet{
+	pkts := []datalink.Packet{
 		{
 			Endpoint: 0x37,
 			Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
@@ -162,7 +162,7 @@ func TestSerialiseMultiPacket(t *testing.T) {
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	pkts := []packet.Packet{
+	pkts := []datalink.Packet{
 		{
 			Endpoint: 0x37,
 			Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
@@ -191,7 +191,7 @@ func TestSerialiseMultiPacketMultiFrame(t *testing.T) {
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	pkts := []packet.Packet{
+	pkts := []datalink.Packet{
 		{
 			Endpoint: 0x37,
 			Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
@@ -219,7 +219,7 @@ func TestSerialiseMultiPacketMultiFrame(t *testing.T) {
 	}
 }
 
-func packetsEqual(a, b packet.Packet) bool {
+func packetsEqual(a, b datalink.Packet) bool {
 	if a.Endpoint != b.Endpoint {
 		return false
 	}
@@ -236,7 +236,7 @@ func TestDeSerialise(t *testing.T) {
 
 	data := []byte{0x19, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
 	data = append(data, crc8.Checksum(data, proto.crc))
-	expected := packet.Packet{
+	expected := datalink.Packet{
 		Endpoint: 0x37,
 		Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
 	}
@@ -297,7 +297,7 @@ func TestDeSerialiseMultiFrame(t *testing.T) {
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	expected := packet.Packet{
+	expected := datalink.Packet{
 		Endpoint: 0x37,
 		Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
 		0x0e, 0x0f, 0x10, 0x11,
@@ -337,7 +337,7 @@ func TestDeSerialiseMultiPacket(t *testing.T) {
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	expected := []packet.Packet{
+	expected := []datalink.Packet{
 		{
 			Endpoint: 0x37,
 			Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
@@ -500,7 +500,7 @@ func TestDeSerialiseSplitFrames(t *testing.T) {
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	expected := packet.Packet{
+	expected := datalink.Packet{
 		Endpoint: 0x37,
 		Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
 		0x0e, 0x0f, 0x10, 0x11,
@@ -562,7 +562,7 @@ func TestSpiconnConnection(t *testing.T) {
 		return
 	}
 
-	pkts := []packet.Packet{
+	pkts := []datalink.Packet{
 		{
 			Endpoint: 0x37,
 			Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,

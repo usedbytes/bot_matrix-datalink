@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"github.com/ecc1/spi"
 	"github.com/sigurn/crc8"
-	"github.com/usedbytes/bot_matrix/datalink/connection"
-	"github.com/usedbytes/bot_matrix/datalink/packet"
+	"github.com/usedbytes/bot_matrix/datalink"
 )
 
 /*
@@ -63,7 +62,7 @@ func min(a, b int) int {
 	return b
 }
 
-func (p *spiProto) serialise(into *bytes.Buffer, pkt packet.Packet) {
+func (p *spiProto) serialise(into *bytes.Buffer, pkt datalink.Packet) {
 	nparts := uint8((len(pkt.Data) + p.datalen - 1) / p.datalen)
 
 	for i, start := 0, 0; i < len(pkt.Data); i += p.datalen {
@@ -90,7 +89,7 @@ func (p *spiProto) serialise(into *bytes.Buffer, pkt packet.Packet) {
 	}
 }
 
-func (p *spiProto) Serialise(pkts []packet.Packet) []byte {
+func (p *spiProto) Serialise(pkts []datalink.Packet) []byte {
 	buf := new(bytes.Buffer)
 
 	for _, pkt := range pkts {
@@ -100,11 +99,11 @@ func (p *spiProto) Serialise(pkts []packet.Packet) []byte {
 	return buf.Bytes()
 }
 
-func (p *spiProto) DeSerialise(data []byte) ([]packet.Packet, error) {
+func (p *spiProto) DeSerialise(data []byte) ([]datalink.Packet, error) {
 	hdrLen := 4
 	packetLen := p.datalen + hdrLen + 1
 
-	pkts := make([]packet.Packet, 0, len(data) / packetLen)
+	pkts := make([]datalink.Packet, 0, len(data) / packetLen)
 
 	var payload []byte
 	var id, ep, nparts byte
@@ -142,7 +141,7 @@ func (p *spiProto) DeSerialise(data []byte) ([]packet.Packet, error) {
 		payload = append(payload, data[i + hdrLen:i + packetLen - 1]...)
 
 		if nparts == 0 {
-			pkts = append(pkts, packet.Packet{
+			pkts = append(pkts, datalink.Packet{
 				Endpoint: ep,
 				Data: payload,
 			})
@@ -155,7 +154,7 @@ func (p *spiProto) DeSerialise(data []byte) ([]packet.Packet, error) {
 	return pkts, nil
 }
 
-func NewSPIConn(device string) (*connection.Connection, error) {
+func NewSPIConn(device string) (*datalink.Connection, error) {
 	proto := spiProto{
 		id: 0,
 		datalen: 32,
@@ -167,7 +166,7 @@ func NewSPIConn(device string) (*connection.Connection, error) {
 		return nil, err
 	}
 
-	conn := connection.NewConnection(&proto, xport)
+	conn := datalink.NewConnection(&proto, xport)
 
 	return conn, nil
 }
