@@ -154,7 +154,7 @@ func (p *spiProto) DeSerialise(data []byte) ([]datalink.Packet, error) {
 	return pkts, nil
 }
 
-func NewSPIConn(device string) (*datalink.Connection, error) {
+func NewSPIConn(device string) (datalink.Transactor, error) {
 	proto := spiProto{
 		id: 0,
 		datalen: 32,
