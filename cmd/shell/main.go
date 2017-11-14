@@ -3,13 +3,16 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/abiosoft/ishell"
 	"github.com/usedbytes/bot_matrix/datalink"
 	"github.com/usedbytes/bot_matrix/datalink/spiconn"
+	"github.com/usedbytes/bot_matrix/datalink/rpcconn"
 )
 
 func ledOn(c datalink.Transactor) {
@@ -101,7 +104,22 @@ func setIlimit(c datalink.Transactor, il uint32) {
 
 func main() {
 	var on bool
-	c, _ := spiconn.NewSPIConn("/dev/spidev0.0")
+	var devname string
+	var c datalink.Transactor
+	var err error
+
+	flag.StringVar(&devname, "devname", "/dev/spidev0.0", "Device to use for communication. Use tcp:.... for RPCConn")
+	flag.Parse()
+
+	if strings.HasPrefix(devname, "tcp:") {
+		c, err = rpcconn.NewRPCClient(devname[len("tcp:"):])
+	} else {
+		c, err = spiconn.NewSPIConn(devname)
+	}
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	// create new shell.
 	// by default, new shell includes 'exit', 'help' and 'clear' commands.
