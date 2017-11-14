@@ -12,21 +12,21 @@ import (
 	"github.com/usedbytes/bot_matrix/datalink/spiconn"
 )
 
-func ledOn(c *datalink.Connection) {
+func ledOn(c datalink.Transactor) {
 	data := []datalink.Packet{
 		{ 1, []byte{1} },
 	}
 	c.Transact(data)
 }
 
-func ledOff(c *datalink.Connection) {
+func ledOff(c datalink.Transactor) {
 	data := []datalink.Packet{
 		{ 1, []byte{0} },
 	}
 	c.Transact(data)
 }
 
-func setFreq(c *datalink.Connection, freq uint32) {
+func setFreq(c datalink.Transactor, freq uint32) {
 	data := []datalink.Packet{
 		{ Endpoint: 2, },
 	}
@@ -39,7 +39,7 @@ func setFreq(c *datalink.Connection, freq uint32) {
 	c.Transact(data)
 }
 
-func setDuty(c *datalink.Connection, ch byte, dir byte, duty uint16) {
+func setDuty(c datalink.Transactor, ch byte, dir byte, duty uint16) {
 	data := []datalink.Packet{
 		{ Endpoint: 3, },
 	}
@@ -54,7 +54,7 @@ func setDuty(c *datalink.Connection, ch byte, dir byte, duty uint16) {
 	c.Transact(data)
 }
 
-func setGains(c *datalink.Connection, Kc, Kd, Ki float64) {
+func setGains(c datalink.Transactor, Kc, Kd, Ki float64) {
 	data := []datalink.Packet{
 		{ Endpoint: 4, },
 	}
@@ -73,7 +73,7 @@ func setGains(c *datalink.Connection, Kc, Kd, Ki float64) {
 	c.Transact(data)
 }
 
-func setPoint(c *datalink.Connection, sp uint32) {
+func setPoint(c datalink.Transactor, sp uint32) {
 	data := []datalink.Packet{
 		{ Endpoint: 5, },
 	}
@@ -86,7 +86,7 @@ func setPoint(c *datalink.Connection, sp uint32) {
 	c.Transact(data)
 }
 
-func setIlimit(c *datalink.Connection, il uint32) {
+func setIlimit(c datalink.Transactor, il uint32) {
 	data := []datalink.Packet{
 		{ Endpoint: 6, },
 	}
