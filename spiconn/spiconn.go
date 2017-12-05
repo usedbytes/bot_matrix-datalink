@@ -121,7 +121,7 @@ func (p *spiProto) DeSerialise(data []byte) ([]datalink.Packet, error) {
 
 		crc := crc8.Checksum(data[i:i + packetLen - 1], p.crc)
 		if crc != data[i + packetLen - 1] {
-			return pkts, fmt.Errorf("CRC error in packet %d", len(pkts) + 1)
+			return pkts, fmt.Errorf("CRC error in packet %d. Expected 0x%x, got 0x%x", len(pkts) + 1, crc, data[i + packetLen - 1])
 		}
 
 		if payload == nil {

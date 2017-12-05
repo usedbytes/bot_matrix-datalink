@@ -5,10 +5,13 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/net/websocket"
 
 	"github.com/abiosoft/ishell"
 	"github.com/usedbytes/bot_matrix/datalink"
@@ -20,7 +23,8 @@ func pumpDatalink(conn datalink.Transactor, tx <-chan datalink.Packet,
 		  rx chan<- datalink.Packet, stop <-chan bool) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 
-	toSend := make([]datalink.Packet, 0, 4)
+	minNum := 4
+	toSend := make([]datalink.Packet, 0, minNum)
 
 	for {
 		select {
@@ -28,13 +32,14 @@ func pumpDatalink(conn datalink.Transactor, tx <-chan datalink.Packet,
 			if len(toSend) > 0 {
 				fmt.Printf("Have %d packets to send.\n", len(toSend))
 			}
-			if len(toSend) < 4 {
-				toSend = append(toSend, make([]datalink.Packet, 4 - len(toSend))...)
+			if len(toSend) < minNum {
+				toSend = append(toSend, make([]datalink.Packet, minNum - len(toSend))...)
 			}
 
 			pkts, err := conn.Transact(toSend)
 			if err != nil {
 				fmt.Printf("Error! %s\n", err)
+				time.Sleep(500 * time.Millisecond)
 			} else {
 				for _, p := range pkts {
 					rx <-p
@@ -142,6 +147,7 @@ func setIlimit(c datalink.Transactor, il uint32) {
 type motor_data struct {
 	Timestamp uint32
 	Count uint32
+	SetPoint uint32
 	Duty uint16
 }
 
@@ -149,6 +155,7 @@ func (m *motor_data) UnmarshalBinary(data []byte) error {
 	buf := bytes.NewBuffer(data)
 	binary.Read(buf, binary.LittleEndian, &m.Timestamp)
 	binary.Read(buf, binary.LittleEndian, &m.Count)
+	binary.Read(buf, binary.LittleEndian, &m.SetPoint)
 	binary.Read(buf, binary.LittleEndian, &m.Duty)
 
 	return nil
@@ -208,12 +215,175 @@ func characteriseMotor(c datalink.Transactor, ctx *ishell.Context) {
 			var m motor_data;
 			m.UnmarshalBinary(p.Data)
 			fmt.Fprintf(f, "%v, %v, %v\n", m.Timestamp, m.Count, m.Duty);
+			fmt.Printf("%v, %v, %v\n", m.Timestamp, m.Count, m.Duty);
 		}
 	}
 
 	setDuty(c, 0, 0, 0)
 
 	stop <- true
+}
+
+const html = `
+<!DOCTYPE HTML>
+<html>
+<head>
+<script>
+window.onload = function () {
+
+var dps = []; // dataPoints
+var dps2 = []; // dataPoints
+var dps3 = []; // dataPoints
+var chart = new CanvasJS.Chart("chartContainer", {
+	title :{
+		text: "Dynamic Data"
+	},
+	axisY:[{
+		title: "Actual speed (1/speed)",
+		lineColor: "blue",
+		titleFontColor: "blue",
+		labelFontColor: "blue",
+		minimum: 30,
+		maximum: 1300,
+	},
+	{
+		title: "PWM Output",
+		lineColor: "red",
+		titleFontColor: "red",
+		labelFontColor: "red"
+	},
+	{
+		title: "PID Setpoint",
+		lineColor: "green",
+		titleFontColor: "green",
+		labelFontColor: "green",
+		minimum: 30,
+		maximum: 1300,
+	},
+	],
+	data: [{
+		axisYIndex: 0,
+		color: "blue",
+		type: "line",
+		dataPoints: dps
+	},
+	{
+		axisYIndex: 1,
+		color: "red",
+		type: "line",
+		dataPoints: dps2
+	},
+	{
+		axisYIndex: 2,
+		color: "green",
+		type: "line",
+		dataPoints: dps3
+	}]
+});
+
+var xVal = 0;
+var yVal = 100; 
+var updateInterval = 1000;
+var dataLength = 200; // number of dataPoints visible at any point
+
+var updateChart = function (count) {
+
+	count = count || 1;
+
+	for (var j = 0; j < count; j++) {
+		yVal = yVal +  Math.round(5 + Math.random() *(-5-5));
+		dps.push({
+			x: xVal,
+			y: yVal
+		});
+		xVal++;
+	}
+
+	if (dps.length > dataLength) {
+		dps.shift();
+	}
+
+	chart.render();
+};
+
+//updateChart(dataLength);
+//setInterval(function(){updateChart()}, updateInterval);
+
+var exampleSocket = new WebSocket("ws://localhost:8080/ws");
+exampleSocket.onmessage = function (event) {
+	var obj = JSON.parse(event.data)
+	d = {
+		x: Number(obj.Timestamp),
+		y: Number(obj.Count),
+	}
+	dps.push(d);
+
+	if (dps.length > dataLength) {
+		dps.shift();
+	}
+
+	d = {
+		x: Number(obj.Timestamp),
+		y: Number(obj.Duty),
+	}
+	dps2.push(d);
+
+	if (dps2.length > dataLength) {
+		dps2.shift();
+	}
+
+	d = {
+		x: Number(obj.Timestamp),
+		y: Number(obj.SetPoint),
+	}
+	dps3.push(d);
+
+	if (dps3.length > dataLength) {
+		dps3.shift();
+	}
+
+	chart.render();
+}
+
+}
+
+</script>
+</head>
+<body>
+<div id="chartContainer" style="height: 370px; width:100%;"></div>
+<script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+</body>
+</html>
+`
+
+func socket(ws *websocket.Conn) {
+	for m := range telem {
+		websocket.JSON.Send(ws, m)
+	}
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintf(w, html)
+}
+
+func webserv() {
+    http.HandleFunc("/", handler)
+    http.Handle("/ws", websocket.Handler(socket))
+    http.ListenAndServe(":8080", nil)
+}
+
+var telem chan motor_data
+
+type wrapper struct {
+	ch chan datalink.Packet
+}
+
+func (w *wrapper) Transact(tx []datalink.Packet) ([]datalink.Packet, error) {
+	for _, p := range tx {
+		w.ch <- p
+	}
+
+	return nil, nil
 }
 
 func main() {
@@ -234,6 +404,34 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+
+	telem = make(chan motor_data, 10);
+	go webserv();
+
+	tx := make(chan datalink.Packet, 10)
+	rx := make(chan datalink.Packet, 10)
+	stop := make(chan bool, 1)
+
+	go func() {
+		for p := range rx {
+			if p.Endpoint != 0xf {
+				continue
+			}
+
+			var m motor_data;
+
+			m.UnmarshalBinary(p.Data)
+
+			select {
+			case telem <- m:
+			default:
+				fmt.Println("drop.")
+			}
+		}
+	}()
+
+	go pumpDatalink(c, tx, rx, stop)
+	c = &wrapper{ tx }
 
 	// create new shell.
 	// by default, new shell includes 'exit', 'help' and 'clear' commands.
@@ -259,6 +457,38 @@ func main() {
 			}
 
 			setPoint(c, uint32(sp))
+		},
+	})
+
+	/*
+	shell.AddCmd(&ishell.Cmd{
+		Name: "pump",
+		Help: "pump",
+		Func: func(ctx *ishell.Context) {
+
+			close(rx)
+			close(tx)
+			close(stop)
+		},
+	})
+	*/
+
+	shell.AddCmd(&ishell.Cmd{
+		Name: "d",
+		Help: "duty",
+		Func: func(ctx *ishell.Context) {
+			if len(ctx.Args) != 1 {
+				ctx.Err(fmt.Errorf("Expected one argument (setpoint uint32)"))
+				return
+			}
+
+			sp, err := strconv.ParseUint(ctx.Args[0], 0, 16)
+			if err != nil {
+				ctx.Err(err)
+				return
+			}
+
+			setDuty(c, 0, 0, uint16(sp))
 		},
 	})
 
