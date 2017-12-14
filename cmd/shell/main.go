@@ -19,6 +19,16 @@ import (
 	"github.com/usedbytes/bot_matrix/datalink/rpcconn"
 )
 
+type motor_set struct {
+	Direction int32
+	SetPoint uint32
+}
+
+type motor_cmd_set struct {
+	A motor_set
+	B motor_set
+}
+
 func pumpDatalink(conn datalink.Transactor, tx <-chan datalink.Packet,
 		  rx chan<- datalink.Packet, stop <-chan bool) {
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -46,7 +56,7 @@ func pumpDatalink(conn datalink.Transactor, tx <-chan datalink.Packet,
 				}
 			}
 
-			toSend = make([]datalink.Packet, 0, 4)
+			toSend = make([]datalink.Packet, 0, minNum)
 
 		case p := <-tx:
 			toSend = append(toSend, p)
@@ -119,14 +129,17 @@ func setGains(c datalink.Transactor, Kc, Kd, Ki float64) {
 }
 
 func setPoint(c datalink.Transactor, sp uint32) {
-	data := []datalink.Packet{
-		{ Endpoint: 5, },
+	set := motor_cmd_set{
+		A: motor_set{ Direction: 0, SetPoint: sp },
+		B: motor_set{ Direction: 0, SetPoint: 0 },
 	}
 
-	buf := &bytes.Buffer{}
-	binary.Write(buf, binary.LittleEndian, sp)
+	data := []datalink.Packet{
+		{ Endpoint: 18, },
+	}
 
-	data[0].Data = buf.Bytes()
+
+	data[0].Data, _ = set.MarshalBinary()
 
 	c.Transact(data)
 }
@@ -144,19 +157,42 @@ func setIlimit(c datalink.Transactor, il uint32) {
 	c.Transact(data)
 }
 
-type motor_data struct {
-	Timestamp uint32
+func (m *motor_cmd_set) MarshalBinary() (data []byte, err error) {
+	buf := &bytes.Buffer{}
+	binary.Write(buf, binary.LittleEndian, int32(0))
+	binary.Write(buf, binary.LittleEndian, m.A.Direction)
+	binary.Write(buf, binary.LittleEndian, m.A.SetPoint)
+	binary.Write(buf, binary.LittleEndian, m.B.Direction)
+	binary.Write(buf, binary.LittleEndian, m.B.SetPoint)
+
+	return buf.Bytes(), nil
+}
+
+type mdata struct {
 	Count uint32
 	SetPoint uint32
 	Duty uint16
 }
 
+type motor_data struct {
+	Timestamp uint32
+	A mdata
+	B mdata
+}
+
 func (m *motor_data) UnmarshalBinary(data []byte) error {
+	var pad int16
+
 	buf := bytes.NewBuffer(data)
 	binary.Read(buf, binary.LittleEndian, &m.Timestamp)
-	binary.Read(buf, binary.LittleEndian, &m.Count)
-	binary.Read(buf, binary.LittleEndian, &m.SetPoint)
-	binary.Read(buf, binary.LittleEndian, &m.Duty)
+	binary.Read(buf, binary.LittleEndian, &m.A.Count)
+	binary.Read(buf, binary.LittleEndian, &m.A.SetPoint)
+	binary.Read(buf, binary.LittleEndian, &m.A.Duty)
+	binary.Read(buf, binary.LittleEndian, &pad)
+	binary.Read(buf, binary.LittleEndian, &m.B.Count)
+	binary.Read(buf, binary.LittleEndian, &m.B.SetPoint)
+	binary.Read(buf, binary.LittleEndian, &m.B.Duty)
+	binary.Read(buf, binary.LittleEndian, &pad)
 
 	return nil
 }
@@ -202,7 +238,7 @@ func characteriseMotor(c datalink.Transactor, ctx *ishell.Context) {
 				var m motor_data;
 
 				m.UnmarshalBinary(p.Data)
-				if m.Duty == duty {
+				if m.A.Duty == duty {
 					break
 				}
 			}
@@ -214,8 +250,8 @@ func characteriseMotor(c datalink.Transactor, ctx *ishell.Context) {
 
 			var m motor_data;
 			m.UnmarshalBinary(p.Data)
-			fmt.Fprintf(f, "%v, %v, %v\n", m.Timestamp, m.Count, m.Duty);
-			fmt.Printf("%v, %v, %v\n", m.Timestamp, m.Count, m.Duty);
+			fmt.Fprintf(f, "%v, %v, %v\n", m.Timestamp, m.A.Count, m.A.Duty);
+			fmt.Printf("%v, %v, %v\n", m.Timestamp, m.A.Count, m.A.Duty);
 		}
 	}
 
@@ -314,7 +350,7 @@ exampleSocket.onmessage = function (event) {
 	var obj = JSON.parse(event.data)
 	d = {
 		x: Number(obj.Timestamp),
-		y: Number(obj.Count),
+		y: Number(obj.A.Count),
 	}
 	dps.push(d);
 
@@ -324,7 +360,7 @@ exampleSocket.onmessage = function (event) {
 
 	d = {
 		x: Number(obj.Timestamp),
-		y: Number(obj.Duty),
+		y: Number(obj.A.Duty),
 	}
 	dps2.push(d);
 
@@ -334,7 +370,7 @@ exampleSocket.onmessage = function (event) {
 
 	d = {
 		x: Number(obj.Timestamp),
-		y: Number(obj.SetPoint),
+		y: Number(obj.A.SetPoint),
 	}
 	dps3.push(d);
 
