@@ -131,7 +131,7 @@ func setGains(c datalink.Transactor, Kc, Kd, Ki float64) {
 func setPoint(c datalink.Transactor, sp uint32) {
 	set := motor_cmd_set{
 		A: motor_set{ Direction: 0, SetPoint: sp },
-		B: motor_set{ Direction: 0, SetPoint: 0 },
+		B: motor_set{ Direction: 1, SetPoint: sp },
 	}
 
 	data := []datalink.Packet{
@@ -270,6 +270,9 @@ window.onload = function () {
 var dps = []; // dataPoints
 var dps2 = []; // dataPoints
 var dps3 = []; // dataPoints
+var dps4 = []; // dataPoints
+var dps5 = []; // dataPoints
+var dps6 = []; // dataPoints
 var chart = new CanvasJS.Chart("chartContainer", {
 	title :{
 		text: "Dynamic Data"
@@ -299,22 +302,41 @@ var chart = new CanvasJS.Chart("chartContainer", {
 	],
 	data: [{
 		axisYIndex: 0,
-		color: "blue",
+		color: "#cc0000",
 		type: "line",
 		dataPoints: dps
 	},
 	{
 		axisYIndex: 1,
-		color: "red",
+		color: "#ff8080",
 		type: "line",
 		dataPoints: dps2
 	},
 	{
 		axisYIndex: 2,
-		color: "green",
+		color: "#800000",
 		type: "line",
 		dataPoints: dps3
-	}]
+	},
+	{
+		axisYIndex: 0,
+		color: "#0000cc",
+		type: "line",
+		dataPoints: dps4
+	},
+	{
+		axisYIndex: 1,
+		color: "#8080ff",
+		type: "line",
+		dataPoints: dps5
+	},
+	{
+		axisYIndex: 2,
+		color: "#000080",
+		type: "line",
+		dataPoints: dps6
+	}
+	]
 });
 
 var xVal = 0;
@@ -348,12 +370,12 @@ var updateChart = function (count) {
 var exampleSocket = new WebSocket("ws://localhost:8080/ws");
 exampleSocket.onmessage = function (event) {
 	var obj = JSON.parse(event.data)
+
 	d = {
 		x: Number(obj.Timestamp),
 		y: Number(obj.A.Count),
 	}
 	dps.push(d);
-
 	if (dps.length > dataLength) {
 		dps.shift();
 	}
@@ -363,7 +385,6 @@ exampleSocket.onmessage = function (event) {
 		y: Number(obj.A.Duty),
 	}
 	dps2.push(d);
-
 	if (dps2.length > dataLength) {
 		dps2.shift();
 	}
@@ -373,9 +394,36 @@ exampleSocket.onmessage = function (event) {
 		y: Number(obj.A.SetPoint),
 	}
 	dps3.push(d);
-
 	if (dps3.length > dataLength) {
 		dps3.shift();
+	}
+
+
+	d = {
+		x: Number(obj.Timestamp),
+		y: Number(obj.B.Count),
+	}
+	dps4.push(d);
+	if (dps4.length > dataLength) {
+		dps4.shift();
+	}
+
+	d = {
+		x: Number(obj.Timestamp),
+		y: Number(obj.B.Duty),
+	}
+	dps5.push(d);
+	if (dps5.length > dataLength) {
+		dps5.shift();
+	}
+
+	d = {
+		x: Number(obj.Timestamp),
+		y: Number(obj.B.SetPoint),
+	}
+	dps6.push(d);
+	if (dps6.length > dataLength) {
+		dps6.shift();
 	}
 
 	chart.render();
