@@ -179,6 +179,7 @@ type mdata struct {
 	Count uint32
 	SetPoint uint32
 	Duty uint16
+	Enabling uint16
 }
 
 type motor_data struct {
@@ -188,18 +189,16 @@ type motor_data struct {
 }
 
 func (m *motor_data) UnmarshalBinary(data []byte) error {
-	var pad int16
-
 	buf := bytes.NewBuffer(data)
 	binary.Read(buf, binary.LittleEndian, &m.Timestamp)
 	binary.Read(buf, binary.LittleEndian, &m.A.Count)
 	binary.Read(buf, binary.LittleEndian, &m.A.SetPoint)
 	binary.Read(buf, binary.LittleEndian, &m.A.Duty)
-	binary.Read(buf, binary.LittleEndian, &pad)
+	binary.Read(buf, binary.LittleEndian, &m.A.Enabling)
 	binary.Read(buf, binary.LittleEndian, &m.B.Count)
 	binary.Read(buf, binary.LittleEndian, &m.B.SetPoint)
 	binary.Read(buf, binary.LittleEndian, &m.B.Duty)
-	binary.Read(buf, binary.LittleEndian, &pad)
+	binary.Read(buf, binary.LittleEndian, &m.B.Enabling)
 
 	return nil
 }
@@ -280,6 +279,8 @@ var dps3 = []; // dataPoints
 var dps4 = []; // dataPoints
 var dps5 = []; // dataPoints
 var dps6 = []; // dataPoints
+var dps7 = []; // dataPoints
+var dps8 = []; // dataPoints
 var chart = new CanvasJS.Chart("chartContainer", {
 	title :{
 		text: "Dynamic Data"
@@ -305,6 +306,14 @@ var chart = new CanvasJS.Chart("chartContainer", {
 		labelFontColor: "green",
 		minimum: 30,
 		maximum: 1300,
+	},
+	{
+		title: "Enabling",
+		lineColor: "black",
+		titleFontColor: "black",
+		labelFontColor: "black",
+		minimum: 0,
+		maximum: 20,
 	},
 	],
 	data: [{
@@ -342,6 +351,18 @@ var chart = new CanvasJS.Chart("chartContainer", {
 		color: "#000080",
 		type: "line",
 		dataPoints: dps6
+	},
+	{
+		axisYIndex: 3,
+		color: "#80ff80",
+		type: "line",
+		dataPoints: dps7
+	},
+	{
+		axisYIndex: 3,
+		color: "#00ff00",
+		type: "line",
+		dataPoints: dps8
 	}
 	]
 });
@@ -431,6 +452,24 @@ exampleSocket.onmessage = function (event) {
 	dps6.push(d);
 	if (dps6.length > dataLength) {
 		dps6.shift();
+	}
+
+	d = {
+		x: Number(obj.Timestamp),
+		y: Number(obj.A.Enabling),
+	}
+	dps7.push(d);
+	if (dps7.length > dataLength) {
+		dps7.shift();
+	}
+
+	d = {
+		x: Number(obj.Timestamp),
+		y: Number(obj.B.Enabling),
+	}
+	dps8.push(d);
+	if (dps8.length > dataLength) {
+		dps8.shift();
 	}
 
 	chart.render();
