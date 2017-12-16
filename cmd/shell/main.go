@@ -81,6 +81,13 @@ func ledOff(c datalink.Transactor) {
 	c.Transact(data)
 }
 
+func reset(c datalink.Transactor) {
+	data := []datalink.Packet{
+		{ 0xfe, []byte{1} },
+	}
+	c.Transact(data)
+}
+
 func setFreq(c datalink.Transactor, freq uint32) {
 	data := []datalink.Packet{
 		{ Endpoint: 2, },
@@ -631,6 +638,14 @@ func main() {
 		Help: "char",
 		Func: func(ctx *ishell.Context) {
 			characteriseMotor(c, ctx)
+		},
+	})
+
+	shell.AddCmd(&ishell.Cmd{
+		Name: "reset",
+		Help: "reset",
+		Func: func(ctx *ishell.Context) {
+			reset(c)
 		},
 	})
 
