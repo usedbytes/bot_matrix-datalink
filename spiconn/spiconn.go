@@ -2,8 +2,6 @@
 package spiconn
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"github.com/ecc1/spi"
 	"github.com/sigurn/crc8"
@@ -21,38 +19,44 @@ struct spi_pl_packet {
 };
 */
 
-type spiXport struct {
+type transferrer interface {
+	transfer(data []byte) ([]byte, error)
+	transferMultiple(data [][]byte) ([][]byte, error)
+}
+
+type spiXferrer struct {
 	dev *spi.Device
 }
 
-func newXport(device string, speed int) (*spiXport, error) {
-	dev, err := spi.Open(device, speed, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	return &spiXport{
-		dev: dev,
-	}, nil
-}
-
-func (x *spiXport) Transfer(data []byte) ([]byte, error) {
+func (s *spiXferrer) transfer(data []byte) ([]byte, error) {
 	tmp := make([]byte, len(data))
 	copy(tmp, data)
 
-	err := x.dev.Transfer(tmp)
+	err := s.dev.Transfer(tmp)
 
 	return tmp, err
 }
 
-type spiProto struct {
+func (s *spiXferrer) transferMultiple(data [][]byte) ([][]byte, error) {
+	ret := make([][]byte, len(data))
+
+	for i, t := range data {
+		rx, err := s.transfer(t)
+		if err != nil {
+			return nil, err
+		}
+		ret[i] = rx
+	}
+
+	return ret, nil
+}
+
+type spiLink struct {
+	xferrer transferrer
+
 	id uint8
 	datalen int
 	crc *crc8.Table
-}
-
-func writeBuf(buf *bytes.Buffer, v interface{}) error {
-	return binary.Write(buf, binary.LittleEndian, v)
 }
 
 func min(a, b int) int {
@@ -62,88 +66,91 @@ func min(a, b int) int {
 	return b
 }
 
-func (p *spiProto) serialise(into *bytes.Buffer, pkt datalink.Packet) {
+func (s *spiLink) serialiseOne(pkt datalink.Packet) [][]byte {
 	// Slightly ugly way to handle empty packets.
 	if pkt.Data == nil || len(pkt.Data) == 0 {
 		pkt.Data = make([]byte, 1)
 	}
 
-	nparts := uint8((len(pkt.Data) + p.datalen - 1) / p.datalen)
+	nparts := uint8((len(pkt.Data) + s.datalen - 1) / s.datalen)
+	ret := make([][]byte, 0, nparts)
 
-	for i, start := 0, 0; i < len(pkt.Data); i += p.datalen {
-		p.id += 1
+	for i := 0; i < len(pkt.Data); i += s.datalen {
 		// nparts is actually "number of parts still to come"
 		// so decrement it before anything
 		nparts -= 1
+		s.id += 1
 
-		hdr := []byte{ p.id, pkt.Endpoint, nparts, byte(0) }
-		writeBuf(into, hdr)
+		d := make([]byte, 4 + s.datalen + 1)
+		d[0] = s.id
+		d[1] = pkt.Endpoint
+		d[2] = nparts
+		d[3] = 0
 
-		end := min(len(pkt.Data), i + p.datalen)
-		writeBuf(into, pkt.Data[i:end])
-		if end - i < p.datalen {
-			// If the last packet is short, we've got to pad it with
-			// zeroes.
-			writeBuf(into, make([]byte, p.datalen - (end - i)))
-		}
+		end := min(len(pkt.Data), i + s.datalen)
+		copy(d[4:], pkt.Data[i:end])
 
-		crc := crc8.Checksum(into.Bytes()[start:into.Len()], p.crc)
-		writeBuf(into, crc)
+		d[len(d)-1] = crc8.Checksum(d[:len(d)-1], s.crc)
 
-		start = into.Len()
-	}
-}
-
-func (p *spiProto) Serialise(pkts []datalink.Packet) []byte {
-	buf := new(bytes.Buffer)
-
-	for _, pkt := range pkts {
-		p.serialise(buf, pkt)
+		ret = append(ret, d)
 	}
 
-	return buf.Bytes()
+	return ret
 }
 
-func (p *spiProto) DeSerialise(data []byte) ([]datalink.Packet, error) {
+func (s *spiLink) serialise(packets []datalink.Packet) [][]byte {
+	// len(packets) is a good approximation - but if some packets are longer
+	// than one transfer, then it will be wrong.
+	transfers := make([][]byte, 0, len(packets))
+
+	for _, pkt := range packets {
+		transfers = append(transfers, s.serialiseOne(pkt)...)
+	}
+
+	return transfers
+}
+
+func (s *spiLink) deSerialise(data [][]byte) ([]datalink.Packet, error) {
 	hdrLen := 4
-	packetLen := p.datalen + hdrLen + 1
+	packetLen := s.datalen + hdrLen + 1
 
-	pkts := make([]datalink.Packet, 0, len(data) / packetLen)
+	pkts := make([]datalink.Packet, 0, len(data))
 
 	var payload []byte
 	var id, ep, nparts byte
 
-	for i := 0; i < len(data); {
-		if len(data) < i + packetLen {
+	for i := 0; i < len(data); i++ {
+		transfer := data[i]
+
+		if len(transfer) < packetLen {
 			return pkts, fmt.Errorf("Short data. Have %d bytes, need %d",
-						len(data), i + packetLen)
+						len(transfer), packetLen)
 		}
 
-		crc := crc8.Checksum(data[i:i + packetLen - 1], p.crc)
-		if crc != data[i + packetLen - 1] {
-			return pkts, fmt.Errorf("CRC error in packet %d. Expected 0x%x, got 0x%x", len(pkts) + 1, crc, data[i + packetLen - 1])
+		if crc8.Checksum(transfer, s.crc) != 0 {
+			return pkts, fmt.Errorf("CRC error in transfer %d.", i)
 		}
 
 		if payload == nil {
-			payload = make([]byte, 0, int(data[i + 2]) * p.datalen)
+			payload = make([]byte, 0, int(transfer[2]) * s.datalen)
 		} else {
-			if data[i] != id + 1 {
-				return pkts, fmt.Errorf("Invalid packet ID. Expected %d got %d", id + 1, data[i])
+			if transfer[0] != id + 1 {
+				return pkts, fmt.Errorf("Invalid packet ID. Expected %d got %d", id + 1, transfer[0])
 			}
 
-			if data[i + 1] != ep {
-				return pkts, fmt.Errorf("Invalid Endpoint. Expected %d got %d", ep, data[i + 1])
+			if transfer[1] != ep {
+				return pkts, fmt.Errorf("Invalid Endpoint. Expected %d got %d", ep, transfer[1])
 			}
 
-			if data[i + 2] != nparts - 1 {
-				return pkts, fmt.Errorf("Invalid nparts. Expected %d got %d", nparts - 1, data[i + 2])
+			if transfer[2] != nparts - 1 {
+				return pkts, fmt.Errorf("Invalid nparts. Expected %d got %d", nparts - 1, transfer[2])
 			}
 		}
 
-		id = data[i]
-		ep = data[i + 1]
-		nparts = data[i + 2]
-		payload = append(payload, data[i + hdrLen:i + packetLen - 1]...)
+		id = transfer[0]
+		ep = transfer[1]
+		nparts = transfer[2]
+		payload = append(payload, transfer[hdrLen:packetLen - 1]...)
 
 		if nparts == 0 {
 			pkts = append(pkts, datalink.Packet{
@@ -152,26 +159,40 @@ func (p *spiProto) DeSerialise(data []byte) ([]datalink.Packet, error) {
 			})
 			payload = nil
 		}
-
-		i += packetLen
 	}
 
 	return pkts, nil
 }
 
+func (s *spiLink) Transact(packets []datalink.Packet) ([]datalink.Packet, error) {
+	transfers := s.serialise(packets)
+
+	rx, err := s.xferrer.transferMultiple(transfers)
+	if err != nil {
+		return nil, err
+	}
+
+	rxPkts, err := s.deSerialise(rx)
+	if err != nil {
+		return nil, err
+	}
+
+	return rxPkts, nil
+}
+
 func NewSPIConn(device string) (datalink.Transactor, error) {
-	proto := spiProto{
+	link := &spiLink{
 		id: 0,
 		datalen: 32,
 		crc: crc8.MakeTable(crc8.CRC8),
 	}
 
-	xport, err := newXport(device, 1000000)
+	dev, err := spi.Open(device, 1000000, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	conn := datalink.NewConnection(&proto, xport)
+	link.xferrer = &spiXferrer{ dev, }
 
-	return conn, nil
+	return link, nil
 }

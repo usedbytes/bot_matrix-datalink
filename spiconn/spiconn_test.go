@@ -12,142 +12,140 @@ import (
 	"github.com/usedbytes/bot_matrix/datalink"
 )
 
-func TestInnerSerialise(t *testing.T) {
-	proto := &spiProto{
+func checkSerialise(t *testing.T, expected, data [][]byte) {
+	if len(data) != len(expected) {
+		t.Fatalf("Unexpected number of transfers. Expected: %d, got: %d\n",
+		len(expected), len(data))
+	}
+
+	for i, _ := range(data) {
+		t.Logf("Transfer %d:\n  Expected: %x\n       Got: %x\n",
+			i, expected[i], data[i])
+
+		if !bytes.Equal(expected[i], data[i]) {
+			t.Fatalf("Data mismatch (%d):\n  Expected: %x\n       Got: %x\n",
+				i, expected[i], data[i])
+		}
+	}
+}
+
+func TestSerialiseOne(t *testing.T) {
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	buf := new(bytes.Buffer)
 	pkt := datalink.Packet{
 		Endpoint: 0x37,
 		Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
 	}
-	expect := []byte{0x01, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d, 0xdd}
-
-	proto.serialise(buf, pkt)
-	if !bytes.Equal(buf.Bytes(), expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, buf.Bytes())
+	expected := [][]byte{
+		{0x01, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d, 0xdd},
 	}
+
+	transfers := link.serialiseOne(pkt)
+
+	checkSerialise(t, expected, transfers)
 }
 
-func TestInnerSerialiseZeroPacket(t *testing.T) {
-	proto := &spiProto{
+func addCrc(s *spiLink, d []byte) []byte {
+	return append(d, crc8.Checksum(d, s.crc))
+}
+
+func TestSerialiseOneZeroPacket(t *testing.T) {
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	buf := new(bytes.Buffer)
 	pkt := datalink.Packet{
 		Endpoint: 0,
 		Data:     nil,
 	}
-	expect := []byte{0x01, 0, 0, 0, 0, 0, 0, 0,}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-
-	proto.serialise(buf, pkt)
-	if !bytes.Equal(buf.Bytes(), expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, buf.Bytes())
+	expected := [][]byte{
+		addCrc(link, []byte{0x01, 0, 0, 0, 0, 0, 0, 0,}),
 	}
 
-	buf = new(bytes.Buffer)
+	transfers := link.serialiseOne(pkt)
+	checkSerialise(t, expected, transfers)
+
 	pkt = datalink.Packet{
 		Endpoint: 0,
 		Data:     []byte{},
 	}
-	expect = []byte{0x02, 0, 0, 0, 0, 0, 0, 0,}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-
-	proto.serialise(buf, pkt)
-	if !bytes.Equal(buf.Bytes(), expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, buf.Bytes())
+	expected = [][]byte{
+		addCrc(link, []byte{0x02, 0, 0, 0, 0, 0, 0, 0,}),
 	}
+
+	transfers = link.serialiseOne(pkt)
+	checkSerialise(t, expected, transfers)
 }
 
-func TestInnerSerialiseShortData(t *testing.T) {
-	proto := &spiProto{
+func TestSerialiseOneShortData(t *testing.T) {
+	link := &spiLink{
 		id:      1,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	buf := new(bytes.Buffer)
 	pkt := datalink.Packet{
 		Endpoint: 0x37,
 		Data:     []byte{0x0a},
 	}
-
-	buf.Reset()
-	expect := []byte{0x02, 0x37, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-	proto.serialise(buf, pkt)
-	if !bytes.Equal(buf.Bytes(), expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, buf.Bytes())
+	expected := [][]byte{
+		addCrc(link, []byte{0x02, 0x37, 0, 0, 0xa, 0, 0, 0,}),
 	}
+
+	transfers := link.serialiseOne(pkt)
+	checkSerialise(t, expected, transfers)
 }
 
-func TestInnerSerialiseID(t *testing.T) {
-	proto := &spiProto{
+func TestSerialiseOneID(t *testing.T) {
+	link := &spiLink{
 		id:      1,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	buf := new(bytes.Buffer)
 	pkt := datalink.Packet{
 		Endpoint: 0x37,
 		Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
 	}
 
-	buf.Reset()
-	expect := []byte{0x02, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-	proto.serialise(buf, pkt)
-	if !bytes.Equal(buf.Bytes(), expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, buf.Bytes())
+	expected := [][]byte{
+		addCrc(link, []byte{0x02, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
 	}
+	transfers := link.serialiseOne(pkt)
+	checkSerialise(t, expected, transfers)
 
-	buf.Reset()
-	expect = []byte{0x03, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-	proto.serialise(buf, pkt)
-	if !bytes.Equal(buf.Bytes(), expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, buf.Bytes())
+	expected = [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
 	}
+	transfers = link.serialiseOne(pkt)
+	checkSerialise(t, expected, transfers)
 }
 
-func TestInnerSerialiseMultiFrame(t *testing.T) {
-	proto := &spiProto{
+func TestSerialiseOneMultiFrame(t *testing.T) {
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	buf := new(bytes.Buffer)
 	pkt := datalink.Packet{
 		Endpoint: 0x37,
 		Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
 			0x0e, 0x0f, 0x10, 0x11},
 	}
 
-	buf.Reset()
-	expect := []byte{0x01, 0x37, 0x01, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-	expect = append(expect, []byte{0x02, 0x37, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	expect = append(expect, crc8.Checksum(expect[9:], proto.crc))
-	proto.serialise(buf, pkt)
-	if !bytes.Equal(buf.Bytes(), expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, buf.Bytes())
+	expected := [][]byte{
+		addCrc(link, []byte{0x01, 0x37, 0x01, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x02, 0x37, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
 	}
+	transfers := link.serialiseOne(pkt)
+	checkSerialise(t, expected, transfers)
 
 	pkt = datalink.Packet{
 		Endpoint: 0x37,
@@ -155,22 +153,17 @@ func TestInnerSerialiseMultiFrame(t *testing.T) {
 			0x0e, 0x0f, 0x10, 0x11,
 			0x12, 0x13, 0x14, 0x15},
 	}
-	buf.Reset()
-	expect = []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-	expect = append(expect, []byte{0x04, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	expect = append(expect, crc8.Checksum(expect[9:], proto.crc))
-	expect = append(expect, []byte{0x05, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}...)
-	expect = append(expect, crc8.Checksum(expect[18:], proto.crc))
-	proto.serialise(buf, pkt)
-	if !bytes.Equal(buf.Bytes(), expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, buf.Bytes())
+	expected = [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x04, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x05, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}),
 	}
+	transfers = link.serialiseOne(pkt)
+	checkSerialise(t, expected, transfers)
 }
 
 func TestSerialise(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
@@ -182,17 +175,16 @@ func TestSerialise(t *testing.T) {
 			Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
 		},
 	}
-	expect := []byte{0x01, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d, 0xdd}
-
-	res := proto.Serialise(pkts)
-	if !bytes.Equal(res, expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, res)
+	expected := [][]byte{
+		addCrc(link, []byte{0x01, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d, }),
 	}
+
+	transfers := link.serialise(pkts)
+	checkSerialise(t, expected, transfers)
 }
 
 func TestSerialiseMultiPacket(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
@@ -208,20 +200,17 @@ func TestSerialiseMultiPacket(t *testing.T) {
 			Data:     []byte{0x0e, 0x0f, 0x10, 0x11},
 		},
 	}
-	expect := []byte{0x01, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-	expect = append(expect, []byte{0x02, 0x37, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	expect = append(expect, crc8.Checksum(expect[9:], proto.crc))
-
-	res := proto.Serialise(pkts)
-	if !bytes.Equal(res, expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, res)
+	expected := [][]byte{
+		addCrc(link, []byte{0x01, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d, }),
+		addCrc(link, []byte{0x02, 0x37, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11, }),
 	}
+
+	transfers := link.serialise(pkts)
+	checkSerialise(t, expected, transfers)
 }
 
 func TestSerialiseMultiPacketMultiFrame(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
@@ -239,20 +228,14 @@ func TestSerialiseMultiPacketMultiFrame(t *testing.T) {
 			Data:     []byte{0x00, 0x01, 0x02, 0x03},
 		},
 	}
-	expect := []byte{0x01, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	expect = append(expect, crc8.Checksum(expect, proto.crc))
-	expect = append(expect, []byte{0x02, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	expect = append(expect, crc8.Checksum(expect[9:], proto.crc))
-	expect = append(expect, []byte{0x03, 0x37, 0x00, 0x00, 0x12, 0x13, 0x00, 0x00}...)
-	expect = append(expect, crc8.Checksum(expect[18:], proto.crc))
-	expect = append(expect, []byte{0x04, 0x42, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03}...)
-	expect = append(expect, crc8.Checksum(expect[27:], proto.crc))
-
-	res := proto.Serialise(pkts)
-	if !bytes.Equal(res, expect) {
-		t.Errorf("Data mismatch:\n  Expected: %x\n       Got: %x\n",
-			expect, res)
+	expected := [][]byte{
+		addCrc(link, []byte{0x01, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x02, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x03, 0x37, 0x00, 0x00, 0x12, 0x13, 0x00, 0x00}),
+		addCrc(link, []byte{0x04, 0x42, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03}),
 	}
+	transfers := link.serialise(pkts)
+	checkSerialise(t, expected, transfers)
 }
 
 func packetsEqual(a, b datalink.Packet) bool {
@@ -263,51 +246,62 @@ func packetsEqual(a, b datalink.Packet) bool {
 	return bytes.Equal(a.Data, b.Data)
 }
 
+func checkDeSerialise(t *testing.T, expected, data []datalink.Packet) {
+	if len(data) != len(expected) {
+		t.Fatalf("Unexpected number of packets. Expected: %d, got: %d\n",
+		len(expected), len(data))
+	}
+
+	for i, _ := range(data) {
+		t.Logf("Packet %d:\n  Expected: %x\n       Got: %x\n",
+			i, expected[i], data[i])
+
+		if !packetsEqual(expected[i], data[i]) {
+			t.Fatalf("Packet mismatch (%d):\n  Expected: %x\n       Got: %x\n",
+				i, expected[i], data[i])
+		}
+	}
+}
+
 func TestDeSerialise(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	data := []byte{0x19, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc))
-	expected := datalink.Packet{
-		Endpoint: 0x37,
-		Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
+	data := [][]byte{
+		addCrc(link, []byte{0x19, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+	}
+	expected := []datalink.Packet{
+		{
+			Endpoint: 0x37,
+			Data:     []byte{0x0a, 0x0b, 0x0c, 0x0d},
+		},
 	}
 
-	pkts, err := proto.DeSerialise(data)
+	pkts, err := link.deSerialise(data)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	if len(pkts) != 1 {
-		t.Errorf("Unexpected number of packets. Expected: %d, got: %d\n",
-			 1, len(pkts))
-		return
-	}
-
-	if !packetsEqual(expected, pkts[0]) {
-		t.Errorf("Packet mismatch.\n  Expected: %v\n       Got: %v\n",
-			 expected, pkts[0])
-		return
-
-	}
+	checkDeSerialise(t, expected, pkts)
 }
 
 func TestDeSerialiseBadCRC(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	data := []byte{0x19, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc) - 1)
+	data := [][]byte{
+		addCrc(link, []byte{0x19, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+	}
+	data[0][0] += 1
 
-	pkts, err := proto.DeSerialise(data)
+	pkts, err := link.deSerialise(data)
 	if err == nil {
 		t.Errorf("Expected error, got none.\n")
 		return
@@ -327,47 +321,37 @@ func TestDeSerialiseBadCRC(t *testing.T) {
 }
 
 func TestDeSerialiseMultiFrame(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	expected := datalink.Packet{
-		Endpoint: 0x37,
-		Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
-		0x0e, 0x0f, 0x10, 0x11,
-		0x12, 0x13, 0x14, 0x15},
+	expected := []datalink.Packet{
+		{
+			Endpoint: 0x37,
+			Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
+			0x0e, 0x0f, 0x10, 0x11,
+			0x12, 0x13, 0x14, 0x15},
+		},
 	}
-	data := []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc))
-	data = append(data, []byte{0x04, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	data = append(data, crc8.Checksum(data[9:], proto.crc))
-	data = append(data, []byte{0x05, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}...)
-	data = append(data, crc8.Checksum(data[18:], proto.crc))
 
-	pkts, err := proto.DeSerialise(data)
+	data := [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x04, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x05, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}),
+	}
+
+	pkts, err := link.deSerialise(data)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
-
-	if len(pkts) != 1 {
-		t.Errorf("Unexpected number of packets. Expected: %d, got: %d\n",
-			 1, len(pkts))
-		return
-	}
-
-	if !packetsEqual(expected, pkts[0]) {
-		t.Errorf("Packet mismatch.\n  Expected: %v\n       Got: %v\n",
-			 expected, pkts[0])
-		return
-
-	}
+	checkDeSerialise(t, expected, pkts)
 }
 
 func TestDeSerialiseMultiPacket(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
@@ -384,53 +368,34 @@ func TestDeSerialiseMultiPacket(t *testing.T) {
 			Data: []byte{0x12, 0x13, 0x14, 0x15},
 		},
 	}
-	data := []byte{0x03, 0x37, 0x01, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc))
-	data = append(data, []byte{0x04, 0x37, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	data = append(data, crc8.Checksum(data[9:], proto.crc))
-	data = append(data, []byte{0x05, 0x38, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}...)
-	data = append(data, crc8.Checksum(data[18:], proto.crc))
+	data := [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x01, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x04, 0x37, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x05, 0x38, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}),
+	}
 
-	pkts, err := proto.DeSerialise(data)
+	pkts, err := link.deSerialise(data)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
-
-	if len(pkts) != 2 {
-		t.Errorf("Unexpected number of packets. Expected: %d, got: %d\n",
-			 2, len(pkts))
-		return
-	}
-
-	if !packetsEqual(expected[0], pkts[0]) {
-		t.Errorf("Packet mismatch.\n  Expected: %v\n       Got: %v\n",
-			 expected[0], pkts[0])
-		return
-	}
-
-	if !packetsEqual(expected[1], pkts[1]) {
-		t.Errorf("Packet mismatch.\n  Expected: %v\n       Got: %v\n",
-			 expected[1], pkts[1])
-		return
-	}
+	checkDeSerialise(t, expected, pkts)
 }
 
 func TestDeSerialiseBadID(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	data := []byte{0x03, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc))
-	data = append(data, []byte{0x08, 0x38, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	data = append(data, crc8.Checksum(data[9:], proto.crc))
-	data = append(data, []byte{0x04, 0x39, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}...)
-	data = append(data, crc8.Checksum(data[18:], proto.crc))
+	data := [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x00, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x08, 0x38, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x04, 0x39, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}),
+	}
 
-	_, err := proto.DeSerialise(data)
+	_, err := link.deSerialise(data)
 	if err == nil {
 		t.Errorf("(Multi packet) Expected error, got none.\n")
 	} else if !strings.HasPrefix(err.Error(), "Invalid packet ID") {
@@ -438,14 +403,13 @@ func TestDeSerialiseBadID(t *testing.T) {
 			 err.Error())
 	}
 
-	data = []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc))
-	data = append(data, []byte{0x08, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	data = append(data, crc8.Checksum(data[9:], proto.crc))
-	data = append(data, []byte{0x04, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}...)
-	data = append(data, crc8.Checksum(data[18:], proto.crc))
+	data = [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x08, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x04, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}),
+	}
 
-	_, err = proto.DeSerialise(data)
+	_, err = link.deSerialise(data)
 	if err == nil {
 		t.Errorf("(Single packet) Expected error, got none.\n")
 	} else if !strings.HasPrefix(err.Error(), "Invalid packet ID") {
@@ -455,20 +419,19 @@ func TestDeSerialiseBadID(t *testing.T) {
 }
 
 func TestDeSerialiseBadEndpoint(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	data := []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc))
-	data = append(data, []byte{0x04, 0x38, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	data = append(data, crc8.Checksum(data[9:], proto.crc))
-	data = append(data, []byte{0x05, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}...)
-	data = append(data, crc8.Checksum(data[18:], proto.crc))
+	data := [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x04, 0x38, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x04, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}),
+	}
 
-	_, err := proto.DeSerialise(data)
+	_, err := link.deSerialise(data)
 	if err == nil {
 		t.Errorf("Expected error, got none.\n")
 		return
@@ -482,20 +445,19 @@ func TestDeSerialiseBadEndpoint(t *testing.T) {
 }
 
 func TestDeSerialiseBadNparts(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	data := []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc))
-	data = append(data, []byte{0x04, 0x37, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	data = append(data, crc8.Checksum(data[9:], proto.crc))
-	data = append(data, []byte{0x05, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}...)
-	data = append(data, crc8.Checksum(data[18:], proto.crc))
+	data := [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x04, 0x37, 0x00, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x04, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}),
+	}
 
-	_, err := proto.DeSerialise(data)
+	_, err := link.deSerialise(data)
 	if err == nil {
 		t.Errorf("Expected error, got none.\n")
 		return
@@ -509,14 +471,16 @@ func TestDeSerialiseBadNparts(t *testing.T) {
 }
 
 func TestDeSerialiseShortData(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	data := []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, }
-	_, err := proto.DeSerialise(data)
+	data := [][]byte{
+		{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, },
+	}
+	_, err := link.deSerialise(data)
 	if err == nil {
 		t.Errorf("Expected error, got none.\n")
 		return
@@ -530,26 +494,27 @@ func TestDeSerialiseShortData(t *testing.T) {
 }
 
 func TestDeSerialiseSplitFrames(t *testing.T) {
-	proto := &spiProto{
+	link := &spiLink{
 		id:      0,
 		datalen: 4,
 		crc:     crc8.MakeTable(crc8.CRC8),
 	}
 
-	expected := datalink.Packet{
-		Endpoint: 0x37,
-		Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
-		0x0e, 0x0f, 0x10, 0x11,
-		0x12, 0x13, 0x14, 0x15},
+	expected := []datalink.Packet{
+		{
+			Endpoint: 0x37,
+			Data: []byte{0x0a, 0x0b, 0x0c, 0x0d,
+			0x0e, 0x0f, 0x10, 0x11,
+			0x12, 0x13, 0x14, 0x15},
+		},
 	}
-	data := []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}
-	data = append(data, crc8.Checksum(data, proto.crc))
-	data = append(data, []byte{0x04, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}...)
-	data = append(data, crc8.Checksum(data[9:], proto.crc))
-	data = append(data, []byte{0x05, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}...)
-	data = append(data, crc8.Checksum(data[18:], proto.crc))
+	data := [][]byte{
+		addCrc(link, []byte{0x03, 0x37, 0x02, 0x00, 0x0a, 0x0b, 0x0c, 0x0d}),
+		addCrc(link, []byte{0x04, 0x37, 0x01, 0x00, 0x0e, 0x0f, 0x10, 0x11}),
+		addCrc(link, []byte{0x05, 0x37, 0x00, 0x00, 0x12, 0x13, 0x14, 0x15}),
+	}
 
-	pkts, err := proto.DeSerialise(data[:9])
+	pkts, err := link.deSerialise(data[:1])
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -561,23 +526,13 @@ func TestDeSerialiseSplitFrames(t *testing.T) {
 		return
 	}
 
-	pkts, err = proto.DeSerialise(data[9:])
+	pkts, err = link.deSerialise(data[1:])
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	if len(pkts) != 1 {
-		t.Errorf("Unexpected number of packets. Expected: %d, got: %d\n",
-			 1, len(pkts))
-		return
-	}
-
-	if !packetsEqual(expected, pkts[0]) {
-		t.Errorf("Packet mismatch.\n  Expected: %v\n       Got: %v\n",
-			 expected, pkts[0])
-		return
-	}
+	checkDeSerialise(t, expected, pkts)
 }
 
 var devname string
