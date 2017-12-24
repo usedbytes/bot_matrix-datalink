@@ -238,14 +238,6 @@ func TestSerialiseMultiPacketMultiFrame(t *testing.T) {
 	checkSerialise(t, expected, transfers)
 }
 
-func packetsEqual(a, b datalink.Packet) bool {
-	if a.Endpoint != b.Endpoint {
-		return false
-	}
-
-	return bytes.Equal(a.Data, b.Data)
-}
-
 func checkDeSerialise(t *testing.T, expected, data []datalink.Packet) {
 	if len(data) != len(expected) {
 		t.Fatalf("Unexpected number of packets. Expected: %d, got: %d\n",
@@ -256,7 +248,7 @@ func checkDeSerialise(t *testing.T, expected, data []datalink.Packet) {
 		t.Logf("Packet %d:\n  Expected: %x\n       Got: %x\n",
 			i, expected[i], data[i])
 
-		if !packetsEqual(expected[i], data[i]) {
+		if !datalink.PacketsEqual(expected[i], data[i]) {
 			t.Fatalf("Packet mismatch (%d):\n  Expected: %x\n       Got: %x\n",
 				i, expected[i], data[i])
 		}
@@ -578,7 +570,7 @@ func TestSpiconnConnection(t *testing.T) {
 	}
 
 	for i, p := range res {
-		if !packetsEqual(pkts[i], p) {
+		if !datalink.PacketsEqual(pkts[i], p) {
 			t.Errorf("Packet %d mismatch.\n  Expected: %v\n       Got: %v\n",
 				 i, pkts[i], p)
 			return

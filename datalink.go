@@ -2,6 +2,7 @@
 package datalink
 
 import (
+	"bytes"
 	"log"
 )
 
@@ -13,6 +14,15 @@ type Packet struct {
 type Transactor interface {
 	Transact([]Packet) ([]Packet, error)
 }
+
+func PacketsEqual(a, b Packet) bool {
+	if a.Endpoint != b.Endpoint {
+		return false
+	}
+
+	return bytes.Equal(a.Data, b.Data)
+}
+
 
 func PumpTransactor(conn Transactor, tx <-chan Packet,
 		    rx chan<- Packet, stop <-chan bool,
