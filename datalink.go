@@ -11,6 +11,10 @@ type Packet struct {
 	Data []byte
 }
 
+func (p Packet) Address() uint {
+	return uint(p.Endpoint)
+}
+
 type Transactor interface {
 	Transact([]Packet) ([]Packet, error)
 }
@@ -22,7 +26,6 @@ func PacketsEqual(a, b Packet) bool {
 
 	return bytes.Equal(a.Data, b.Data)
 }
-
 
 func PumpTransactor(conn Transactor, tx <-chan Packet,
 		    rx chan<- Packet, stop <-chan bool,
