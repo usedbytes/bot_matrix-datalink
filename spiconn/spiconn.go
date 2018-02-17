@@ -51,12 +51,19 @@ func (s *spiXferrer) transferMultiple(data [][]byte) ([][]byte, error) {
 	return ret, nil
 }
 
+type deSerCtx struct {
+	id, ep, nparts byte
+	payload []byte
+}
+
 type spiLink struct {
 	xferrer transferrer
 
 	id uint8
 	datalen int
 	crc *crc8.Table
+
+	ctx deSerCtx
 }
 
 func min(a, b int) int {
@@ -116,48 +123,55 @@ func (s *spiLink) deSerialise(data [][]byte) ([]datalink.Packet, error) {
 
 	pkts := make([]datalink.Packet, 0, len(data))
 
-	var payload []byte
-	var id, ep, nparts byte
-
 	for i := 0; i < len(data); i++ {
 		transfer := data[i]
 
 		if len(transfer) < packetLen {
+			s.ctx.payload = nil
 			return pkts, fmt.Errorf("Short data. Have %d bytes, need %d",
 						len(transfer), packetLen)
 		}
 
 		if crc8.Checksum(transfer, s.crc) != 0 {
+			s.ctx.payload = nil
 			return pkts, fmt.Errorf("CRC error in transfer %d.", i)
 		}
 
-		if payload == nil {
-			payload = make([]byte, 0, int(transfer[2]) * s.datalen)
+		if s.ctx.payload == nil {
+			s.ctx.payload = make([]byte, 0, int(transfer[2]) * s.datalen)
 		} else {
-			if transfer[0] != id + 1 {
-				return pkts, fmt.Errorf("Invalid packet ID. Expected %d got %d", id + 1, transfer[0])
+			if transfer[0] != s.ctx.id + 1 {
+				s.ctx.payload = nil
+				return pkts, fmt.Errorf("Invalid packet ID. Expected %d got %d", s.ctx.id + 1, transfer[0])
 			}
 
-			if transfer[1] != ep {
-				return pkts, fmt.Errorf("Invalid Endpoint. Expected %d got %d", ep, transfer[1])
+			if transfer[1] == 0 {
+				s.ctx.id = transfer[0]
+				continue
 			}
 
-			if transfer[2] != nparts - 1 {
-				return pkts, fmt.Errorf("Invalid nparts. Expected %d got %d", nparts - 1, transfer[2])
+			if transfer[1] != s.ctx.ep {
+				s.ctx.payload = nil
+				return pkts, fmt.Errorf("Invalid Endpoint. Expected %d got %d", s.ctx.ep, transfer[1])
+			}
+
+			if transfer[2] != s.ctx.nparts - 1 {
+				s.ctx.payload = nil
+				return pkts, fmt.Errorf("Invalid nparts. Expected %d got %d", s.ctx.nparts - 1, transfer[2])
 			}
 		}
 
-		id = transfer[0]
-		ep = transfer[1]
-		nparts = transfer[2]
-		payload = append(payload, transfer[hdrLen:packetLen - 1]...)
+		s.ctx.id = transfer[0]
+		s.ctx.ep = transfer[1]
+		s.ctx.nparts = transfer[2]
+		s.ctx.payload = append(s.ctx.payload, transfer[hdrLen:packetLen - 1]...)
 
-		if nparts == 0 {
+		if s.ctx.nparts == 0 {
 			pkts = append(pkts, datalink.Packet{
-				Endpoint: ep,
-				Data: payload,
+				Endpoint: s.ctx.ep,
+				Data: s.ctx.payload,
 			})
-			payload = nil
+			s.ctx.payload = nil
 		}
 	}
 
