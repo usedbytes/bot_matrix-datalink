@@ -3,6 +3,7 @@ package spiconn
 
 import (
 	"fmt"
+	"encoding/hex"
 	"github.com/ecc1/spi"
 	"github.com/sigurn/crc8"
 	"github.com/usedbytes/bot_matrix/datalink"
@@ -115,6 +116,12 @@ func (s *spiLink) serialise(packets []datalink.Packet) [][]byte {
 	}
 
 	return transfers
+}
+
+func dumpTransfers(data [][]byte) {
+	for _, t := range data {
+		fmt.Println(hex.Dump(t))
+	}
 }
 
 func (s *spiLink) deSerialise(data [][]byte) ([]datalink.Packet, error) {
