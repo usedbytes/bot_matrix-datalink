@@ -124,6 +124,14 @@ func dumpTransfers(data [][]byte) {
 	}
 }
 
+func nextID(id uint8) uint8 {
+	id = id + 1
+	if (id >= 0x80) {
+		id = 0
+	}
+	return id
+}
+
 func (s *spiLink) deSerialise(data [][]byte) ([]datalink.Packet, error) {
 	hdrLen := 4
 	packetLen := s.datalen + hdrLen + 1
@@ -147,7 +155,7 @@ func (s *spiLink) deSerialise(data [][]byte) ([]datalink.Packet, error) {
 		if s.ctx.payload == nil {
 			s.ctx.payload = make([]byte, 0, int(transfer[2]) * s.datalen)
 		} else {
-			if transfer[0] != s.ctx.id + 1 {
+			if transfer[0] != nextID(s.ctx.id) {
 				s.ctx.payload = nil
 				return pkts, fmt.Errorf("Invalid packet ID. Expected %d got %d", s.ctx.id + 1, transfer[0])
 			}
