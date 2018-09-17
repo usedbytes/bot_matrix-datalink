@@ -3,9 +3,10 @@ package netconn
 
 import (
 	"bytes"
+	"bufio"
 	"encoding/binary"
+	"fmt"
 	"net"
-	"time"
 
 	"github.com/usedbytes/bot_matrix/datalink"
 )
@@ -32,28 +33,21 @@ type netconn struct {
 
 	current *Packet
 	remaining uint32
+
+	read chan readResp
 }
 
-func (c *netconn) Transact(packets []datalink.Packet) ([]datalink.Packet, error) {
-	// First send (should we spawn a goroutine for this? If so, need to sync)
-	for _, p := range packets {
-		binary.Write(c.c, binary.LittleEndian, uint32(p.Endpoint))
-		binary.Write(c.c, binary.LittleEndian, uint32(len(p.Data)))
-		binary.Write(c.c, binary.LittleEndian, p.Data)
-	}
+type readResp struct {
+	pkt datalink.Packet
+	err error
+}
 
-	// Then receive
-	nrx := 0
-	rxPkts := make([]datalink.Packet, 0, 4)
+func (c *netconn) readerThread() {
 	for {
-		// TODO: Find a better way for nonblock reads
-		c.c.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
 		n, err := c.c.Read(c.buf[c.cursor:])
 		if err != nil {
-			// TODO: Catch errors which aren't timeouts
-			break
-		} else if n == 0 {
-			break
+			// TODO: Should the thread exit?
+			c.read <-readResp{ err: err }
 		}
 
 		c.remaining -= uint32(n)
@@ -72,10 +66,12 @@ func (c *netconn) Transact(packets []datalink.Packet) ([]datalink.Packet, error)
 			c.buf = make([]byte, c.remaining)
 			c.cursor = 0
 		} else {
-			rxPkts = append(rxPkts, datalink.Packet{})
-			rxPkts[nrx].Endpoint = uint8(c.current.ptype)
-			rxPkts[nrx].Data = c.buf
-			nrx++
+			c.read <-readResp{
+				pkt: datalink.Packet{
+					Endpoint: uint8(c.current.ptype),
+					Data: c.buf,
+				},
+			}
 
 			c.remaining = 8
 			c.buf = make([]byte, 8)
@@ -83,8 +79,44 @@ func (c *netconn) Transact(packets []datalink.Packet) ([]datalink.Packet, error)
 			c.current = nil
 		}
 	}
+}
 
-	return rxPkts, nil
+func (c *netconn) Transact(packets []datalink.Packet) ([]datalink.Packet, error) {
+	// First send (should we spawn a goroutine for this? If so, need to sync)
+	buf := bufio.NewWriter(c.c)
+	for _, p := range packets {
+		if p.Endpoint == 0 && len(p.Data) == 0 {
+			continue
+		}
+
+		err := binary.Write(buf, binary.LittleEndian, uint32(p.Endpoint))
+		if err != nil {
+			fmt.Println(err)
+		}
+		err = binary.Write(buf, binary.LittleEndian, uint32(len(p.Data)))
+		if err != nil {
+			fmt.Println(err)
+		}
+		err = binary.Write(buf, binary.LittleEndian, p.Data)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+	buf.Flush()
+
+	// Then receive
+	rxPkts := make([]datalink.Packet, 0, 4)
+	for {
+		select {
+		case resp := <-c.read:
+			if resp.err != nil {
+				return rxPkts, resp.err
+			}
+			rxPkts = append(rxPkts, resp.pkt)
+		default:
+			return rxPkts, nil
+		}
+	}
 }
 
 func NewNetconn(c net.Conn) datalink.Transactor {
@@ -92,7 +124,10 @@ func NewNetconn(c net.Conn) datalink.Transactor {
 		c: c,
 		buf: make([]byte, 8),
 		remaining: 8,
+		read: make(chan readResp, 5),
 	}
+
+	go conn.readerThread()
 
 	return conn
 }
